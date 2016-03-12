@@ -238,6 +238,28 @@ def parse_dependency_file(location):
         raise Exception("ERROR: malformed dependency file")
     return dependencies
 
+# if there is any conflict with existing and new
+# delete the roomservice.xml file and create new
+def check_manifest_problems(dependencies):
+    for dependency in dependencies:
+        repository = dependency.get("repository")
+        target_path = dependency.get("target_path")
+        revision = dependency.get("revision", default_rev)
+        remote = dependency.get("remote", default_rem)
+
+        # check for existing projects
+        for project in iterate_manifests():
+            if project.get("path") == target_path and project.get("revision") != revision:
+                print("WARNING: detected conflict in revisions for repository ", repository)
+                current_dependency = str(project.get(repository))
+                file = ES.parse('/'.join([local_manifest_dir, "roomservice.xml"]))
+                file_root = file.getroot()
+                for current_project in file_root.findall('project'):
+                    new_dependency = str(current_project.find('revision'))
+                    if new_dependency == current_dependency:
+                        file_root.remove(current_project)
+                file.write('/'.join([local_manifest_dir, "roomservice.xml"]))
+                return
 
 def parse_patch_file(location):
     patch_file = "patches/apply.sh"
@@ -282,8 +304,9 @@ def fetch_dependencies(device):
         raise Exception("ERROR: could not find your device "
                         "folder location, bailing out")
     dependencies = parse_dependency_file(location)
+    check_manifest_problems(dependencies)
     create_dependency_manifest(dependencies)
-
+    fetch_device(device)
 
 def check_device_exists(device):
     location = parse_device_from_folder(device)
